@@ -1,6 +1,7 @@
 const express = require("express");
 const mysql = require("mysql");
 var cors = require("cors");
+const { check, validationResult } = require("express-validator");
 
 const dbConfig = {
 	host: "localhost",
@@ -56,34 +57,58 @@ app.get("/cows/:id", cors(corsOptions), (req, res) => {
 	);
 });
 
-app.post("/cows", cors(corsOptions), (req, res) => {
-	connection.query(
-		"INSERT INTO Cows (`name`, `weight`, `total_milk`, `last_milking_time`) VALUES (?, ?, ?, ?)",
-		[
-			req.body.name,
-			req.body.weight,
-			req.body.total_milk,
-			req.body.last_milking_time,
-		],
-		// TODO :: check if this can be simplified
-		// "INSERT INTO Cows VALUES (?)",
-		// req.body,
-		(err, rows, field) => {
-			if (err) throw err;
-			console.log("created: ", { id: rows.insertId, ...req.body });
-			res.status(201).send({ id: rows.insertId, ...req.body });
-		}
-	);
-});
+app.post(
+	"/cows",
+	check("last_milking_time").isISO8601().toDate().withMessage({
+		message: "Not an valid date",
+		errorCode: 1,
+	}),
+	cors(corsOptions),
+	(req, res) => {
+		const errors = validationResult(req);
+		if (!errors.isEmpty()) return res.json(errors);
+		if (req.body.name === "xxx")
+			return res.status(500).json({
+				error_code: "XXX_NOT_ALLOWED",
+				error_msg: "Please do not use XXX!",
+			});
+		connection.query(
+			"INSERT INTO Cowss (`name`, `weight`, `total_milk`, `last_milking_time`) VALUES (?, ?, ?, ?)",
+			[
+				req.body.name,
+				req.body.weight,
+				req.body.total_milk,
+				req.body.last_milking_time.slice(0, 19).replace("T", " "), // TODO :: sometimes this fails
+			],
+
+			// TODO :: check if this can be simplified
+			// "INSERT INTO Cows VALUES (?)",
+			// req.body,
+			(err, rows, field) => {
+				if (err) {
+					return res.status(500).send({
+						error_code: err.code,
+						error_msg: err.sqlMessage,
+					});
+				}
+				console.log("created: ", { id: rows.insertId, ...req.body });
+				res.status(201).send({ id: rows.insertId, ...req.body });
+			}
+		);
+	}
+);
 
 app.put("/cows/:id", cors(corsOptions), (req, res) => {
+	console.log(req.body.last_milking_time.slice(0, 19).replace("T", " "));
+	// input data validation
+
 	connection.query(
 		"UPDATE cows SET name = ?, weight = ?, total_milk = ?, last_milking_time = ? WHERE id = ?",
 		[
 			req.body.name,
 			req.body.weight,
 			req.body.total_milk,
-			req.body.last_milking_time,
+			req.body.last_milking_time.slice(0, 19).replace("T", " "), // sanitization
 			req.params.id,
 		],
 		(err, rows, field) => {
